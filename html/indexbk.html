@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="A layout example with a side menu that hides on mobile, just like the Pure website.">
+
+    <title>にこあにれっく</title>
+
+    <script type="text/javascript" src="js/jquery-1.3.2.js"></script>
+
+    <script src="/webui/player/mediaelement-and-player.min.js"></script>
+    <link rel="stylesheet" href="/webui/player/mediaelementplayer.min.css" />
+
+    <script type="text/javascript">
+    jQuery(document).ready( function() {
+        $("#allanimes").click(function(){
+            $("#current").text("> アニメ一覧");
+            $("#plate").load("allanimes.html", null, function(){
+                $("#refresh").click(function(){
+                    $.ajaxSetup({ async: false });
+                    $("#refresh").text("更新しています");
+                    $.get("/api/refreshanimelst");
+                    $("#refresh").text("更新");
+                    $.ajaxSetup({ async: true });
+                });
+            });
+            var reclst;
+            $.getJSON("/api/getallrecs", function(data){
+                reclst = data.result;
+            });
+            $.getJSON("/api/getanimelst", function(data){
+                $(data.allanimes).each(function(){
+                    var channel = this.channel;
+                    var link = this.link;
+                    var title = this.title;
+                    var cbox = "#cbox_"+channel;
+                    $('<tr><td><input type="checkbox" class="center" id="cbox_'+channel+'" /></td><td>' + title +
+                      '</td><td><a href="' + link + '">' + link + '</a>' +
+                      '</td></tr>').appendTo("#allanimes_table");
+                    if($.inArray(channel, reclst) != -1) {
+                        $('#cbox_'+channel).attr("checked", true);
+                    }
+                    $('#cbox_'+channel).click(function() {
+                        if($('#cbox_'+channel).is(":checked")) {
+                            $.get("/api/addrec?channel="+channel);
+                        } else {
+                            $.get("/api/delrec?channel="+channel);
+                        }
+                    });
+                })
+            });
+        });
+        $("#recording").click(function(){
+            $("#current").text("> 予約")
+            $("#plate").load("allanimes.html");
+            var reclst;
+            $.getJSON("/api/getallrecs", function(data){
+                reclst = data.result;
+            });
+            $.getJSON("/api/getanimelst", function(data){
+                $(data.allanimes).each(function(){
+                    var channel = this.channel;
+                    var link = this.link;
+                    var title = this.title;
+                    var cbox = "#cbox_"+channel;
+                    if($.inArray(channel, reclst) == -1) {
+                        return true;
+                    }
+                    $('<tr><td><input type="checkbox" class="center" id="cbox_'+channel+'" checked /></td><td>' + title +
+                      '</td><td><a href="' + link + '">' + link + '</a>' +
+                      '</td></tr>').appendTo("#allanimes_table");
+                    
+                    $('#cbox_'+channel).click(function() {
+                        if($('#cbox_'+channel).is(":checked")) {
+                            $.get("/api/addrec?channel="+channel);
+                        } else {
+                            $.get("/api/delrec?channel="+channel);
+                        }
+                    });
+                })
+            });
+        });
+        var player;
+        $("#recorded").click(function(){
+            $("#current").text("> 録画済み")
+            $("#plate").load("recorded.html", null, function(){
+                $("#refresh").click(function(){
+                    $("#refresh").text("更新しています");
+                    $.ajaxSetup({ async: false });
+                    $.get("/api/updatechinfo");
+                    $("#refresh").text("更新");
+                    $.ajaxSetup({ async: true });
+                });
+            });
+            $.getJSON("/api/getrecorded", function(data){
+                $(data.titles).each(function(){
+                    var channel = this.channel;
+                    var title = this.title;
+                    $('<button class="pure-button button-title" id="title_' + channel + '">' + title + '</button>').appendTo("#titles");
+                    $('#title_' + channel).click(function() {
+                        $('#rec_detail').load('recorded-detail.html');
+                        $.getJSON("/api/getdetail?title="+title, function(story) {
+                            $(story.stories).each(function(){
+                                var vname = this.title;
+                                var link = this.link;
+                                var vid = this.vid;
+                                var statelabel = "取得失敗";
+                                $.getJSON("/api/getvideostate?title=" + title + "&vname=" + vname, function(state) {
+                                    $('<tr><td>' + vname + '</td><td id="state_' + vid + '">' +
+                                    '</td><td id="action_' + vid + '">' +
+                                    '</td></tr>').appendTo("#stories");
+                                    recordable = state.result;
+                                    var action;
+                                    if(recordable == 0) {
+                                        $('#state_' + vid).text("録画不可");
+                                        $('#action_' + vid).html('<a href="' + link + '">動画ページ</a>');
+                                    } else if(recordable == 1) {
+                                        $('#state_' + vid).text("録画可");
+                                        $('#action_' + vid).html('<button class="pure-button" id="dl_' + vid + '">ダウンロード</button>');
+                                    } else if(recordable == 2) {
+                                        $('#state_' + vid).text("録画済");
+                                        $('#action_' + vid).html('<button class="pure-button" id="watch_' + vid + '">観る</button>');
+                                    } else if(recordable == 3) {
+                                        $('#state_' + vid).text("録画中");
+                                        $('#action_' + vid).html('<button class="pure-button pure-button-disabled">ダウンロード中</button>');
+                                    }
+                                    $('#dl_' + vid).click(function(){
+                                        $.getJSON("/api/downloadvideo?title=" + title + "&vname=" + vname + "&vid=" + vid, function(res){
+                                            if(res.result == 1) {
+                                                alert("他のダウンロードが実行中なのでダウンロードできません。");
+                                            } else {
+                                                $('#dl_' + vid).text('ダウンロード中');
+                                                $('#dl_' + vid).attr("class", "pure-button pure-button-disabled");
+                                                alert("ダウンロードの状態は更新ボタンを押すまで変更されないので注意してください。");
+                                            }
+                                        });
+                                    });
+                                    $('#watch_' + vid).click(function (){
+                                        if(player == null) {
+                                             player = new MediaElementPlayer('video', {
+                                                 features: ['playpause', 'progress', 'current', 'duration', 'volume', 'fullscreen']
+                                             });
+                                        }
+                                        
+                                        player.setSrc("/webui/video/" + title + "/" + vname + ".flv");
+
+                                        $("body").append('<div id="modal-overlay"></div>');
+                                        $("#modal-overlay").fadeIn("slow");
+                                        centeringModalSyncer();
+                                        $("#modal-content").fadeIn("slow");
+                                        $("#modal-overlay,#modal-close").unbind().click(function(){
+                                            player.pause();
+                                            $("#modal-content,#modal-overlay").fadeOut("slow",function(){
+                                                $('#modal-overlay').remove();
+                                            });
+                                        });
+                                    });
+                                });
+                            })
+                        });
+                    });
+                })
+            });
+        });
+        $(window).resize(centeringModalSyncer);
+        function centeringModalSyncer(){
+            var w = $(window).width();
+            var h = $(window).height();
+            var cw = $("#modal-content").outerWidth({margin:true});
+            var ch = $("#modal-content").outerHeight({margin:true});
+            $("#modal-content").css({"left": ((w - cw)/2) + "px","top": ((h - ch)/2) + "px"})
+        }
+    });
+    </script>
+    <style type="text/css">
+    <!--
+    th {white-space: nowrap;}
+    td {white-space: nowrap;}
+    .title {padding 5px;}
+    .home-menu {
+        position: fixed;
+        top: 0;
+    }
+    .home-menu {
+        background: #2d3e50;
+    }
+
+    .home-menu p {
+        margin: auto;
+        color: white;
+        font-size: 120%;
+    }
+    #plate {
+        margin-top: 30px;
+    }
+    input.center {width:50px; margin:0 auto 0 auto;}
+    .button-title {
+        margin: 5px;
+        text-align: left;
+        width: 80%;
+        height: 50px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        -webkit-text-overflow: ellipsis;
+        -o-text-overflow: ellipsis;
+    }
+    .pure-table {margin-top: 20px;}
+    #modal-content{
+        width:50%;
+        margin:0;
+        padding:10px 20px;
+        border:2px solid #aaa;
+        background:#fff;
+        position:fixed;
+        display:none;
+        z-index:2;
+    }
+    #modal-overlay{
+        z-index:1;
+        display:none;
+        position:fixed;
+        top:0;
+        left:0;
+        width:100%;
+        height:120%;
+        background-color:rgba(0,0,0,0.75);
+    }
+    .button-link{
+        color:#00f;
+        width: 100%;
+        text-align: center;
+        text-decoration:underline;
+    }
+    .button-link:hover{
+        cursor:pointer;
+        color:#f00;
+    }
+    .center {margin: auto;}
+    #plate {width: 80%; margin: auto; margin-top: 50px;}
+    </style>
+
+
+<link rel="stylesheet" href="http://yui.yahooapis.com/pure/0.6.0/pure-min.css">
+
+
+
+
+
+
+
+  
+    <!--[if lte IE 8]>
+        <link rel="stylesheet" href="css/layouts/side-menu-old-ie.css">
+    <![endif]-->
+    <!--[if gt IE 8]><!-->
+        <link rel="stylesheet" href="css/layouts/side-menu.css">
+    <!--<![endif]-->
+  
+
+
+    
+
+    
+
+</head>
+<body>
+
+
+
+
+<div id="modal-content">
+
+    <video width="320" height="240" poster="player/poster.jpg" controls="controls" preload="none">
+    <!-- MP4 for Safari, IE9, iPhone, iPad, Android, and Windows Phone 7 -->
+    <source type="video/mp4" src="" />
+    <!-- WebM/VP8 for Firefox4, Opera, and Chrome -->
+    <source type="video/webm" src="" />
+    <!-- Ogg/Vorbis for older Firefox and Opera versions -->
+    <source type="video/ogg" src="" />
+    <!-- Flash fallback for non-HTML5 browsers without JavaScript -->
+    <object width="320" height="240" type="application/x-shockwave-flash" data="player/flashmediaelement.swf">
+        <param name="movie" value="player/flashmediaelement.swf" />
+        <param name="flashvars" value="controls=true" />
+        <!-- Image as a last resort -->
+        <img src="player/myvideo.jpg" width="320" height="240" title="No video playback capabilities" />
+    </object>
+    </video>
+    <a id="modal-close" class="button-link center">閉じる</a>
+</div>
+
+<div id="layout">
+    <!-- Menu toggle -->
+    <a href="#menu" id="menuLink" class="menu-link">
+        <!-- Hamburger icon -->
+        <span></span>
+    </a>
+
+    <div id="menu">
+        <div class="pure-menu">
+            <a class="pure-menu-heading" href="#">WEB UI</a>
+
+            <ul class="pure-menu-list">
+                <li class="pure-menu-item menu-item-divided"><a href="#" id="allanimes" class="pure-menu-link">アニメ一覧</a></li>
+                <li class="pure-menu-item"><a href="#" id="recording" class="pure-menu-link">予約</a></li>
+                <li class="pure-menu-item"><a href="#" id="recorded" class="pure-menu-link">録画済み</a></li>
+                <li class="pure-menu-item"><a href="#" class="pure-menu-link">設定</a></li>
+                <li class="pure-menu-item menu-item-divided"><a href="#" class="pure-menu-link">動作ログ</a></li>
+                <li class="pure-menu-item"><a href="#" class="pure-menu-link">About</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div id="main">
+        <div class="home-menu pure-menu pure-menu-horizontal">
+            <p class="pure-menu-heading" id="current"> > Home</a>
+        </div>
+
+        <div id="plate">
+        </div>
+    </div>
+</div>
+
+
+
+
+
+<script src="js/ui.js"></script>
+
+
+</body>
+</html>
